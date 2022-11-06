@@ -6,11 +6,17 @@ import tkinter.font
 
 from browser.Text import Text
 from browser.Element import Element
-from browser.Layout import Layout
+from browser.InlineLayout import InlineLayout
 from browser.HTMLParser import HTMLParser
+from browser.DocumentLayout import DocumentLayout
+from browser.BlockLayout import BlockLayout
 
+WIDTH, HEIGHT = 800, 600
+SCROLL_STEP = 100
+HSTEP, VSTEP = 13, 18
 
 class Browser:
+
     WIDTH, HEIGHT = 800, 600
     SCROLL_STEP = 100
     HSTEP, VSTEP = 13, 18
@@ -32,24 +38,26 @@ class Browser:
 
 
     def scrolldown(self, e):
-        self.scroll += self.SCROLL_STEP
+        max_y = self.document.height - HEIGHT
+        self.scroll = min(self.scroll + SCROLL_STEP, max_y)
         self.draw()
 
     def draw(self):
         self.canvas.delete("all")
-
-        for x, y, c, font in self.display_list:
-            if y > self.scroll + self.HEIGHT: continue
-            if y + self.VSTEP < self.scroll: continue
-            self.canvas.create_text(x, y - self.scroll, text=c, font=font, anchor='nw')
+        for cmd in self.display_list:
+            if cmd.top > self.scroll + HEIGHT: continue
+            if cmd.bottom < self.scroll: continue
+            cmd.execute(self.scroll, self.canvas)
 
     def load(self, url):
 
         headers, body = request(url)
         self.nodes = HTMLParser(body).parse()
-        self.display_list = Layout(self.nodes).display_list
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
+        self.display_list = []
+        self.document.paint(self.display_list)
         self.draw()
-
 
 
 def request(url):

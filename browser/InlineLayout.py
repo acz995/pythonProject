@@ -1,24 +1,45 @@
 import tkinter
 import tkinter.font
 from browser.Text import Text
+from browser.DrawText import DrawText
+from browser.DrawRect import DrawRect
+from browser.Element import Element
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18
 
 
-class Layout:
+class InlineLayout:
 
-    def __init__(self, nodes):
+    def __init__(self, node, parent, previous):
+        self.node = node
+        self.parent = parent
+        self.previous = previous
+        self.children = []
+
+    def paint(self, display_list):
+        if isinstance(self.node, Element) and self.node.tag == "pre":
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            display_list.append(rect)
+        for x, y, word, font in self.display_list:
+            display_list.append(DrawText(x, y, word, font))
+
+    def layout(self):
+
         self.FONTS = {}
         self.display_list = []
-        self.cursor_x = HSTEP
-        self.cursor_y = VSTEP
+        self.x = HSTEP
+        self.y = VSTEP
+        self.cursor_x = self.x
+        self.cursor_y = self.y
         self.weight = "normal"
+        self.height = self.cursor_y - self.y
         self.style = "roman"
         self.size = 16
         self.line = []
-        self.recurse(nodes)
+        self.recurse(self.node)
         self.flush()
 
     def open_tag(self, tag):
@@ -92,7 +113,7 @@ class Layout:
         for x, word, font in self.line:
             y = baseline - font.metrics("ascent")
             self.display_list.append((x, y, word, font))
-        self.cursor_x = HSTEP
+        self.cursor_x = self.x
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
