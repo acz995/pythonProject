@@ -21,6 +21,10 @@ class BlockLayout:
         self.parent = parent
         self.previous = previous
         self.children = []
+        self.y = 0
+        self.x = 0
+        self.width = 0
+        self.height = 0
 
     def paint(self, display_list):
         for child in self.children:
@@ -36,6 +40,7 @@ class BlockLayout:
             self.children.append(next)
             previous = next
 
+
         self.width = self.parent.width
         self.x = self.parent.x
         if self.previous:
@@ -45,6 +50,7 @@ class BlockLayout:
         for child in self.children:
             child.layout()
         self.height = sum([child.height for child in self.children])
+
 
 
 
@@ -59,4 +65,8 @@ class BlockLayout:
             return "inline"
         else:
             return "block"
+
+    def __repr__(self) -> str:
+        return f"BlockLayout(y={self.y}, height={self.height})"
+
 

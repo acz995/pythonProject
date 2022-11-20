@@ -28,19 +28,23 @@ class InlineLayout:
 
     def layout(self):
 
+        if self.previous:
+            self.y = self.previous.y + self.previous.height
+        else:
+            self.y = self.parent.y
+        self.x = self.parent.x
+
         self.FONTS = {}
         self.display_list = []
-        self.x = HSTEP
-        self.y = VSTEP
         self.cursor_x = self.x
         self.cursor_y = self.y
         self.weight = "normal"
-        self.height = self.cursor_y - self.y
         self.style = "roman"
         self.size = 16
         self.line = []
         self.recurse(self.node)
         self.flush()
+        self.height = self.cursor_y - self.y
 
     def open_tag(self, tag):
         if tag == "i":
@@ -133,4 +137,7 @@ class InlineLayout:
             for child in tree.children:
                 self.recurse(child)
             self.close_tag(tree.tag)
+
+    def __repr__(self) -> str:
+        return f"InlineLayout(y={self.y}, height={self.height})"
 

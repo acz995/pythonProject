@@ -15,6 +15,7 @@ WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18
 
+
 class Browser:
 
     WIDTH, HEIGHT = 800, 600
@@ -55,6 +56,7 @@ class Browser:
         self.nodes = HTMLParser(body).parse()
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
+        print_tree(self.document)
         self.display_list = []
         self.document.paint(self.display_list)
         self.draw()
@@ -115,6 +117,7 @@ if __name__ == "__main__":
     import sys
 
     url = 'http://example.org/index.html'
+    # url = 'https://forum.garudalinux.org/'
     Browser().load(url)
 
     headers, body = request(url)
