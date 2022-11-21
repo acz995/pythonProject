@@ -14,3 +14,4 @@ class DrawRect:
             width=0,
             fill=self.color,
         )
+

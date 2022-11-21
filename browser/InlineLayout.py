@@ -4,6 +4,8 @@ from browser.Text import Text
 from browser.DrawText import DrawText
 from browser.DrawRect import DrawRect
 from browser.Element import Element
+from browser.TextLayout import TextLayout
+from browser.LineLayout import LineLayout
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
@@ -13,38 +15,41 @@ HSTEP, VSTEP = 13, 18
 class InlineLayout:
 
     def __init__(self, node, parent, previous):
+        self.FONTS = {}
+        self.weight = "normal"
+        self.style = "roman"
+        self.size = 16
         self.node = node
         self.parent = parent
         self.previous = previous
         self.children = []
 
     def paint(self, display_list):
-        if isinstance(self.node, Element) and self.node.tag == "pre":
+        bgcolor = self.node.style.get("background-color",
+                                      "transparent")
+        if bgcolor != "transparent":
             x2, y2 = self.x + self.width, self.y + self.height
-            rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
             display_list.append(rect)
-        for x, y, word, font in self.display_list:
-            display_list.append(DrawText(x, y, word, font))
+
+        for child in self.children:
+            child.paint(display_list)
 
     def layout(self):
-
+        self.width = self.parent.width
+        self.x = self.parent.x
         if self.previous:
             self.y = self.previous.y + self.previous.height
         else:
             self.y = self.parent.y
-        self.x = self.parent.x
 
-        self.FONTS = {}
-        self.display_list = []
-        self.cursor_x = self.x
-        self.cursor_y = self.y
-        self.weight = "normal"
-        self.style = "roman"
-        self.size = 16
-        self.line = []
+        self.new_line()
         self.recurse(self.node)
-        self.flush()
-        self.height = self.cursor_y - self.y
+        for line in self.children:
+            line.layout()
+            
+        self.height = sum([line.height for line in self.children])
+        # self.height = self.cursor_y - self.y
 
     def open_tag(self, tag):
         if tag == "i":
@@ -97,26 +102,41 @@ class InlineLayout:
     #         self.cursor_y += VSTEP
 
 
-    def text(self, tok):
-        font = self.get_font(self.size, self.weight, self.style)
-        for word in tok.text.split():
+    def text(self, node):
+        color = self.node.style["color"]
+        weight = self.node.style["font-weight"]
+        style = self.node.style["font-style"]
+        if style == "normal":
+            style = "roman"
+        size = int(float(self.node.style["font-size"][:-2]) * .75)
+        font = self.get_font(size, weight, style)
+        for word in node.text.split():
             w = font.measure(word)
-            if self.cursor_x + w > WIDTH - HSTEP:
-                self.flush()
+            if self.cursor_x + w > self.width - HSTEP:
+                self.new_line()
                 # self.cursor_y += font.metrics("linespace") * 1.25
                 cursor_x = HSTEP
-            self.line.append((self.cursor_x, word, font))
+            line = self.children[-1]
+            text = TextLayout(node, word, line, self.previous_word)
+            line.children.append(text)
+            self.previous_word = text
             self.cursor_x += w + font.measure(" ")
 
+    def new_line(self):
+        self.previous_word = None
+        self.cursor_x = self.x
+        last_line = self.children[-1] if self.children else None
+        new_line = LineLayout(self.node, self, last_line)
+        self.children.append(new_line)
 
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, color in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
+        for x, word, font, color in self.line:
             y = baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+            self.display_list.append((x, y, word, font, color))
         self.cursor_x = self.x
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
@@ -129,14 +149,14 @@ class InlineLayout:
             self.FONTS[key] = font
         return self.FONTS[key]
 
-    def recurse(self, tree):
-        if isinstance(tree, Text):
-            self.text(tree)
+    def recurse(self, node):
+        if isinstance(node, Text):
+            self.text(node)
         else:
-            self.open_tag(tree.tag)
-            for child in tree.children:
+            if node.tag == "br":
+                self.flush()
+            for child in node.children:
                 self.recurse(child)
-            self.close_tag(tree.tag)
 
     def __repr__(self) -> str:
         return f"InlineLayout(y={self.y}, height={self.height})"
