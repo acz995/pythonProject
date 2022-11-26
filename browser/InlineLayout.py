@@ -6,11 +6,20 @@ from browser.DrawRect import DrawRect
 from browser.Element import Element
 from browser.TextLayout import TextLayout
 from browser.LineLayout import LineLayout
+from browser.InputLayout import InputLayout
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18
-
+INPUT_WIDTH_PX = 200
+BLOCK_ELEMENTS = [
+        "html", "body", "article", "section", "nav", "aside",
+        "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "header",
+        "footer", "address", "p", "hr", "pre", "blockquote",
+        "ol", "ul", "menu", "li", "dl", "dt", "dd", "figure",
+        "figcaption", "main", "div", "table", "form", "fieldset",
+        "legend", "details", "summary"
+    ]
 
 class InlineLayout:
 
@@ -34,6 +43,14 @@ class InlineLayout:
 
         for child in self.children:
             child.paint(display_list)
+        is_atomic = not isinstance(self.node, Text) and \
+                    (self.node.tag == "input" or self.node.tag == "button")
+
+        if not is_atomic:
+            if bgcolor != "transparent":
+                x2, y2 = self.x + self.width, self.y + self.height
+                rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
+                display_list.append(rect)
 
     def layout(self):
         self.width = self.parent.width
@@ -42,7 +59,7 @@ class InlineLayout:
             self.y = self.previous.y + self.previous.height
         else:
             self.y = self.parent.y
-
+        self.line = []
         self.new_line()
         self.recurse(self.node)
         for line in self.children:
@@ -155,9 +172,38 @@ class InlineLayout:
         else:
             if node.tag == "br":
                 self.flush()
-            for child in node.children:
-                self.recurse(child)
+            elif node.tag == "input" or node.tag == "button":
+                self.input(node)
+            else:
+                for child in node.children:
+                    self.recurse(child)
+
+    def input(self, node):
+        w = INPUT_WIDTH_PX
+        if self.cursor_x + w > self.x + self.width:
+            self.new_line()
+        line = self.children[-1]
+        input = InputLayout(node, line, self.previous_word)
+        line.children.append(input)
+        self.previous_word = input
+        font = self.get_font(self.size,self.weight, self.style)
+        self.cursor_x += w + font.measure(" ")
 
     def __repr__(self) -> str:
         return f"InlineLayout(y={self.y}, height={self.height})"
+
+def layout_mode(node):
+    if isinstance(node, Text):
+        return "inline"
+    elif node.children:
+        for child in node.children:
+            if isinstance(child, Text): continue
+            if child.tag in BLOCK_ELEMENTS:
+                return "block"
+        return "inline"
+    elif node.tag == "input":
+        return "inline"
+    else:
+        return "block"
+
 

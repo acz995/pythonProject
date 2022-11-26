@@ -11,6 +11,7 @@ from browser.HTMLParser import HTMLParser
 from browser.DocumentLayout import DocumentLayout
 from browser.BlockLayout import BlockLayout
 from browser.CSSParser import CSSParser
+from browser.Tab import Tab
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
@@ -21,6 +22,7 @@ INHERITED_PROPERTIES = {
     "font-weight": "normal",
     "color": "black",
 }
+CHROME_PX = 100
 
 
 class Browser:
@@ -31,23 +33,58 @@ class Browser:
 
     def __init__(self):
         self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, width=self.WIDTH, height=self.HEIGHT, bg="white")
-        self.canvas.pack()
-        self.scroll = 0
-        self.url = None
-        self.window.bind("<Down>", self.scrolldown)
-        self.bi_times = tkinter.font.Font(
-            family="Times",
-            size=16,
-            weight="bold",
-            slant="italic",
+        self.canvas = tkinter.Canvas(
+            self.window,
+            width=WIDTH,
+            height=HEIGHT,
+            bg="white",
         )
-        self.weight = "normal"
-        self.style = "roman"
-        self.window.bind("<Button-1>", self.click)
+        self.canvas.pack()
+        self.FONTS = {}
+        self.window.bind("<Down>", self.handle_down)
+        self.window.bind("<Button-1>", self.handle_click)
+        self.window.bind("<Key>", self.handle_key)
+        self.window.bind("<Return>", self.handle_enter)
 
+        self.tabs = []
+        self.active_tab = None
+        self.focus = None
+        self.address_bar = ""
         with open("browser.css") as f:
             self.default_style_sheet = CSSParser(f.read()).parse()
+
+    def handle_down(self, e):
+        self.tabs[self.active_tab].scrolldown()
+        self.draw()
+
+    def handle_click(self, e):
+        self.focus = None
+        if e.y < CHROME_PX:
+            if 40 <= e.x < 40 + 80 * len(self.tabs) and 0 <= e.y < 40:
+                self.active_tab = int((e.x - 40) / 80)
+            elif 10 <= e.x < 30 and 10 <= e.y < 30:
+                self.load("https://browser.engineering/")
+            elif 10 <= e.x < 35 and 40 <= e.y < 90:
+                self.tabs[self.active_tab].go_back()
+            elif 50 <= e.x < WIDTH - 10 and 40 <= e.y < 90:
+                self.focus = "address bar"
+                self.address_bar = ""
+        else:
+            self.tabs[self.active_tab].click(e.x, e.y - CHROME_PX)
+        self.draw()
+
+    def handle_key(self, e):
+        if len(e.char) == 0: return
+        if not (0x20 <= ord(e.char) < 0x7f): return
+        if self.focus == "address bar":
+            self.address_bar += e.char
+            self.draw()
+
+    def handle_enter(self, e):
+        if self.focus == "address bar":
+            self.tabs[self.active_tab].load(self.address_bar)
+            self.focus = None
+            self.draw()
 
     def click(self, e):
         x, y = e.x, e.y
@@ -65,43 +102,62 @@ class Browser:
                 return self.load(url)
             elt = elt.parent
 
-
-    def scrolldown(self, e):
-        max_y = self.document.height - HEIGHT
-        self.scroll = min(self.scroll + SCROLL_STEP, max_y)
-        self.draw()
-
     def draw(self):
         self.canvas.delete("all")
-        for cmd in self.display_list:
-            if cmd.top > self.scroll + HEIGHT: continue
-            if cmd.bottom < self.scroll: continue
-            cmd.execute(self.scroll, self.canvas)
+        self.tabs[self.active_tab].draw(self.canvas)
+        self.canvas.create_rectangle(0, 0, WIDTH, CHROME_PX,
+                                     fill="white", outline="black")
+
+        tabfont = self.get_font(20, "normal", "roman")
+        for i, tab in enumerate(self.tabs):
+            name = "Tab {}".format(i)
+            x1, x2 = 40 + 80 * i, 120 + 80 * i
+            self.canvas.create_line(x1, 0, x1, 40, fill="black")
+            self.canvas.create_line(x2, 0, x2, 40, fill="black")
+            self.canvas.create_text(x1 + 10, 10, anchor="nw", text=name,
+                                    font=tabfont, fill="black")
+            if i == self.active_tab:
+                self.canvas.create_line(0, 40, x1, 40, fill="black")
+                self.canvas.create_line(x2, 40, WIDTH, 40, fill="black")
+
+        buttonfont = self.get_font(30, "normal", "roman")
+        self.canvas.create_rectangle(10, 10, 30, 30,
+                                     outline="black", width=1)
+        self.canvas.create_text(11, 0, anchor="nw", text="+",
+                                font=buttonfont, fill="black")
+
+        self.canvas.create_rectangle(40, 50, WIDTH - 10, 90,
+                                     outline="black", width=1)
+        if self.focus == "address bar":
+            self.canvas.create_text(
+                55, 55, anchor='nw', text=self.address_bar,
+                font=buttonfont, fill="black")
+            w = buttonfont.measure(self.address_bar)
+            self.canvas.create_line(55 + w, 55, 55 + w, 85, fill="black")
+        else:
+            url = self.tabs[self.active_tab].url
+            self.canvas.create_text(55, 55, anchor='nw', text=url,
+                                    font=buttonfont, fill="black")
+
+        self.canvas.create_rectangle(10, 50, 35, 90,
+                                     outline="black", width=1)
+        self.canvas.create_polygon(
+            15, 70, 30, 55, 30, 85, fill='black')
+
 
     def load(self, url):
-        self.url = url
-        headers, body = request(url)
-        self.nodes = HTMLParser(body).parse()
-        rules = self.default_style_sheet.copy()
-        style(self.nodes, sorted(rules, key=cascade_priority))
-        links = [node.attributes["href"]
-                 for node in tree_to_list(self.nodes, [])
-                 if isinstance(node, Element)
-                 and node.tag == "link"
-                 and "href" in node.attributes
-                 and node.attributes.get("rel") == "stylesheet"]
-        for link in links:
-            try:
-                header, body = request(resolve_url(link, url))
-            except:
-                continue
-            rules.extend(CSSParser(body).parse())
-        self.document = DocumentLayout(self.nodes)
-        self.document.layout()
-        print_tree(self.document)
-        self.display_list = []
-        self.document.paint(self.display_list)
+        new_tab = Tab()
+        new_tab.load(url)
+        self.active_tab = len(self.tabs)
+        self.tabs.append(new_tab)
         self.draw()
+
+    def get_font(self, size, weight, slant):
+        key = (size, weight, slant)
+        if key not in self.FONTS:
+            font = tkinter.font.Font(size=size, weight=weight, slant=slant)
+            self.FONTS[key] = font
+        return self.FONTS[key]
 
 
 def compute_style(node, property, value):
@@ -123,6 +179,7 @@ def compute_style(node, property, value):
 def cascade_priority(rule):
     selector, body = rule
     return selector.priority
+
 
 def resolve_url(url, current):
     if "://" in url:

@@ -16,20 +16,19 @@ INHERITED_PROPERTIES = {
     "font-weight": "normal",
     "color": "black",
 }
+CHROME_PX = 100
 
 
 class Tab:
     def __init__(self):
-        self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, width=WIDTH, height=HEIGHT, bg="white")
-        self.canvas.pack()
-        self.scroll = 0
-        self.display_list = []
+        self.url = None
+        self.history = []
+
         with open("browser.css") as f:
             self.default_style_sheet = CSSParser(f.read()).parse()
 
-    def click(self, e):
-        x, y = e.x, e.y
+
+    def click(self, x, y):
         y += self.scroll
         objs = [obj for obj in tree_to_list(self.document, [])
                 if obj.x <= x < obj.x + obj.width
@@ -42,25 +41,41 @@ class Tab:
             elif elt.tag == "a" and "href" in elt.attributes:
                 url = resolve_url(elt.attributes["href"], self.url)
                 return self.load(url)
+            elif elt.tag == "input":
+                self.focus = elt
+                elt.attributes["value"] = ""
+                return self.render()
             elt = elt.parent
 
-    def scrolldown(self, e):
-        max_y = self.document.height - HEIGHT
+    def scrolldown(self):
+        max_y = self.document.height - (HEIGHT - CHROME_PX)
         self.scroll = min(self.scroll + SCROLL_STEP, max_y)
 
+
+
+
+    def go_back(self):
+        if len(self.history) > 1:
+            self.history.pop()
+            back = self.history.pop()
+            self.load(back)
+
     def draw(self, canvas):
-        self.canvas.delete("all")
         for cmd in self.display_list:
             if cmd.top > self.scroll + HEIGHT: continue
             if cmd.bottom < self.scroll: continue
-            cmd.execute(self.scroll, self.canvas)
+            cmd.execute(self.scroll, canvas)
+
+
 
     def load(self, url):
-        self.url = url
         headers, body = request(url)
+        self.scroll = 0
+        self.url = url
+        self.history.append(url)
         self.nodes = HTMLParser(body).parse()
-        rules = self.default_style_sheet.copy()
-        style(self.nodes, sorted(rules, key=cascade_priority))
+
+        self.rules = self.default_style_sheet.copy()
         links = [node.attributes["href"]
                  for node in tree_to_list(self.nodes, [])
                  if isinstance(node, Element)
@@ -72,12 +87,19 @@ class Tab:
                 header, body = request(resolve_url(link, url))
             except:
                 continue
-            rules.extend(CSSParser(body).parse())
+            self.rules.extend(CSSParser(body).parse())
+        style(self.nodes, sorted(self.rules, key=cascade_priority))
 
-    def render(self):
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        print_tree(self.document)
+        self.display_list = []
+        self.document.paint(self.display_list)
+        self.render()
+
+    def render(self):
+        style(self.nodes, sorted(self.rules, key=cascade_priority))
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
         self.display_list = []
         self.document.paint(self.display_list)
 
