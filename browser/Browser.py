@@ -281,9 +281,9 @@ if __name__ == "__main__":
     # url = 'https://forum.garudalinux.org/'
     Browser().load(url)
 
-    headers, body = request(url)
-    nodes = HTMLParser(body).parse()
-    print_tree(nodes)
+    # headers, body = request(url)
+    # nodes = HTMLParser(body).parse()
+    # print_tree(nodes)
 
     WIDTH, HEIGHT = 800, 600
     #window = tkinter.Tk()

@@ -80,9 +80,9 @@ class HTMLParser:
         for attrpair in parts[1:]:
             if "=" in attrpair:
                 key, value = attrpair.split("=", 1)
-                attributes[key.lower()] = value
                 if len(value) > 2 and value[0] in ["'", "\""]:
                     value = value[1:-1]
+                attributes[key.lower()] = value
             else:
                 attributes[attrpair.lower()] = ""
         return tag, attributes

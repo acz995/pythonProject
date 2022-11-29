@@ -64,7 +64,7 @@ class Tab:
         for cmd in self.display_list:
             if cmd.top > self.scroll + HEIGHT: continue
             if cmd.bottom < self.scroll: continue
-            cmd.execute(self.scroll, canvas)
+            cmd.execute(self.scroll - CHROME_PX, canvas)
 
 
 
@@ -118,6 +118,9 @@ def resolve_url(url, current):
         host, oldpath = hostpath.split("/", 1)
         return scheme + "://" + host + url
     else:
+        scheme, hostpath = current.split("://", 1)
+        if "/" not in hostpath:
+            current = current + "/"
         dir, _ = current.rsplit("/", 1)
         while url.startswith("../"):
             url = url[3:]
@@ -126,6 +129,7 @@ def resolve_url(url, current):
         return dir + "/" + url
 
 def request(url):
+    print("requesting: " + url)
     schema, host_path = url.split("://", 1)
     host, path = host_path.split("/", 1)
 

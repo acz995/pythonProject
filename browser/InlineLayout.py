@@ -36,21 +36,16 @@ class InlineLayout:
     def paint(self, display_list):
         bgcolor = self.node.style.get("background-color",
                                       "transparent")
-        if bgcolor != "transparent":
-            x2, y2 = self.x + self.width, self.y + self.height
-            rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
-            display_list.append(rect)
-
-        for child in self.children:
-            child.paint(display_list)
         is_atomic = not isinstance(self.node, Text) and \
                     (self.node.tag == "input" or self.node.tag == "button")
-
         if not is_atomic:
             if bgcolor != "transparent":
                 x2, y2 = self.x + self.width, self.y + self.height
                 rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
                 display_list.append(rect)
+
+        for child in self.children:
+            child.paint(display_list)
 
     def layout(self):
         self.width = self.parent.width
