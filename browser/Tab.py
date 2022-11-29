@@ -1,11 +1,14 @@
 import socket
 import tkinter
 import tkinter.font
+import urllib
+
 from browser.CSSParser import CSSParser
 from browser.Text import Text
 from browser.HTMLParser import HTMLParser
 from browser.Element import Element
 from browser.DocumentLayout import DocumentLayout
+from browser.InputLayout import InputLayout
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
@@ -23,7 +26,7 @@ class Tab:
     def __init__(self):
         self.url = None
         self.history = []
-
+        self.focus = None
         with open("browser.css") as f:
             self.default_style_sheet = CSSParser(f.read()).parse()
 
@@ -45,7 +48,29 @@ class Tab:
                 self.focus = elt
                 elt.attributes["value"] = ""
                 return self.render()
+            elif elt.tag == "button":
+                while elt:
+                    if elt.tag == "form" and "action" in elt.attributes:
+                        return self.submit_form(elt)
+                    elt = elt.parent
             elt = elt.parent
+
+    def submit_form(self, elt):
+        inputs = [node for node in tree_to_list(elt, [])
+                  if isinstance(node, Element)
+                  and node.tag == "input"
+                  and "name" in node.attributes]
+        body = ""
+        for input in inputs:
+            name = input.attributes["name"]
+            value = input.attributes.get("value", "")
+            name = urllib.parse.quote(name)
+            value = urllib.parse.quote(value)
+            body += "&" + name + "=" + value
+        body = body[1:]
+
+        url = resolve_url(elt.attributes["action"], self.url)
+        self.load(url, body)
 
     def scrolldown(self):
         max_y = self.document.height - (HEIGHT - CHROME_PX)
@@ -65,11 +90,22 @@ class Tab:
             if cmd.top > self.scroll + HEIGHT: continue
             if cmd.bottom < self.scroll: continue
             cmd.execute(self.scroll - CHROME_PX, canvas)
+        if self.focus:
+            obj = [obj for obj in tree_to_list(self.document, [])
+                   if obj.node == self.focus and \
+                   isinstance(obj, InputLayout)][0]
+            text = self.focus.attributes.get("value", "")
+            x = obj.x + obj.font.measure(text)
+            y = obj.y - self.scroll + CHROME_PX
+            canvas.create_line(x, y, x, y + obj.height)
 
+    def keypress(self, char):
+        if self.focus:
+            self.focus.attributes["value"] += char
+            self.render()
 
-
-    def load(self, url):
-        headers, body = request(url)
+    def load(self, url, body=None):
+        headers, body = request(url, body)
         self.scroll = 0
         self.url = url
         self.history.append(url)
@@ -128,17 +164,22 @@ def resolve_url(url, current):
             dir, _ = dir.rsplit("/", 1)
         return dir + "/" + url
 
-def request(url):
+def request(url, payload=None):
     print("requesting: " + url)
     schema, host_path = url.split("://", 1)
     host, path = host_path.split("/", 1)
-
     path = "/" + path
-
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
     s.connect((host, 80))
-    s.send("GET {} HTTP/1.0\r\n".format(path).encode("utf8") +
-           "Host: {}\r\n\r\n".format(host).encode("utf8"))
+    method = "POST" if payload else "GET"
+    body = "{} {} HTTP/1.0\r\n".format(method, path)
+    if payload:
+        length = len(payload.encode("utf8"))
+        body += "Content-Length: {}\r\n".format(length)
+    body += "\r\n" + (payload if payload else "")
+    s.send(body.encode("utf8"))
+    # s.send("GET {} HTTP/1.0\r\n".format(path).encode("utf8") +
+    #        "Host: {}\r\n\r\n".format(host).encode("utf8"))
     response = s.makefile("r", encoding="utf8", newline="\r\n")
     statusline = response.readline()
     version, status, explanation = statusline.split(" ", 2)
@@ -152,6 +193,7 @@ def request(url):
     assert "transfer-encoding" not in headers
     assert "content-encoding" not in headers
     body = response.read()
+
     s.close()
     return headers, body
 

@@ -60,6 +60,7 @@ class Browser:
     def handle_click(self, e):
         self.focus = None
         if e.y < CHROME_PX:
+            self.focus = None
             if 40 <= e.x < 40 + 80 * len(self.tabs) and 0 <= e.y < 40:
                 self.active_tab = int((e.x - 40) / 80)
             elif 10 <= e.x < 30 and 10 <= e.y < 30:
@@ -70,6 +71,7 @@ class Browser:
                 self.focus = "address bar"
                 self.address_bar = ""
         else:
+            self.focus = "content"
             self.tabs[self.active_tab].click(e.x, e.y - CHROME_PX)
         self.draw()
 
@@ -78,6 +80,9 @@ class Browser:
         if not (0x20 <= ord(e.char) < 0x7f): return
         if self.focus == "address bar":
             self.address_bar += e.char
+            self.draw()
+        elif self.focus == "content":
+            self.tabs[self.active_tab].keypress(e.char)
             self.draw()
 
     def handle_enter(self, e):
@@ -225,16 +230,22 @@ def style(node, rules):
         style(child, rules)
 
 
-def request(url):
+def request(url, payload=None):
+    print("requesting: " + url)
     schema, host_path = url.split("://", 1)
     host, path = host_path.split("/", 1)
-
     path = "/" + path
-
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
     s.connect((host, 80))
-    s.send("GET {} HTTP/1.0\r\n".format(path).encode("utf8") +
-           "Host: {}\r\n\r\n".format(host).encode("utf8"))
+    method = "POST" if payload else "GET"
+    body = "{} {} HTTP/1.0\r\n".format(method, path)
+    if payload:
+        length = len(payload.encode("utf8"))
+        body += "Content-Length: {}\r\n".format(length)
+    body += "\r\n" + (payload if payload else "")
+    s.send(body.encode("utf8"))
+    # s.send("GET {} HTTP/1.0\r\n".format(path).encode("utf8") +
+    #        "Host: {}\r\n\r\n".format(host).encode("utf8"))
     response = s.makefile("r", encoding="utf8", newline="\r\n")
     statusline = response.readline()
     version, status, explanation = statusline.split(" ", 2)
@@ -248,6 +259,7 @@ def request(url):
     assert "transfer-encoding" not in headers
     assert "content-encoding" not in headers
     body = response.read()
+
     s.close()
     return headers, body
 
