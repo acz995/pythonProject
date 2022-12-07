@@ -36,6 +36,7 @@ class HTMLParser:
             self.add_text(text)
         return self.finish()
 
+
     def add_text(self, text):
         if text.isspace(): return
         self.implicit_tags(None)
